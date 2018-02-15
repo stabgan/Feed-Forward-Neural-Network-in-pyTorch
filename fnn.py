@@ -1,3 +1,4 @@
+#importing dependencies
 import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
@@ -21,7 +22,7 @@ test_dataset = dsets.MNIST(root='./data',
 STEP 2: MAKING DATASET ITERABLE
 '''
 
-batch_size = 100
+batch_size = 100 # I tried various hyperparameters and finally fixed this
 n_iters = 3000
 num_epochs = n_iters / (len(train_dataset) / batch_size)
 num_epochs = int(num_epochs)
