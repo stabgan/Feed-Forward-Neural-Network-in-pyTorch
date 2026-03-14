@@ -1,46 +1,20 @@
-# Feed-Forward Neural Network for MNIST Classification
-# Dependencies
+"""Feed-Forward Neural Network for MNIST Classification.
+
+A 4-layer fully connected network trained on the MNIST dataset
+to classify handwritten digits (0-9).
+"""
+
 import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
 import torchvision.datasets as dsets
 
-'''
-STEP 1: LOADING DATASET
-'''
-
-train_dataset = dsets.MNIST(root='./data',
-                            train=True,
-                            transform=transforms.ToTensor(),
-                            download=True)
-
-test_dataset = dsets.MNIST(root='./data',
-                           train=False,
-                           transform=transforms.ToTensor())
-
-'''
-STEP 2: MAKING DATASET ITERABLE
-'''
-
-batch_size = 100
-n_iters = 3000
-num_epochs = int(n_iters / (len(train_dataset) / batch_size))
-
-train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
-                                           batch_size=batch_size,
-                                           shuffle=True)
-
-test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
-                                          batch_size=batch_size,
-                                          shuffle=False)
-
-'''
-STEP 3: CREATE MODEL CLASS
-'''
 
 class FeedforwardNeuralNetModel(nn.Module):
+    """4-layer feed-forward network: 784 → 100 → 100 → 100 → 10."""
+
     def __init__(self, input_dim, hidden_dim, output_dim):
-        super(FeedforwardNeuralNetModel, self).__init__()
+        super().__init__()
         # Linear function 1: 784 --> 100
         self.fc1 = nn.Linear(input_dim, hidden_dim)
         self.relu1 = nn.ReLU()
@@ -57,103 +31,105 @@ class FeedforwardNeuralNetModel(nn.Module):
         self.fc4 = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, x):
-        # Linear function 1
         out = self.fc1(x)
         out = self.relu1(out)
 
-        # Linear function 2
         out = self.fc2(out)
         out = self.relu2(out)
 
-        # Linear function 3
         out = self.fc3(out)
         out = self.relu3(out)
 
-        # Linear function 4 (readout)
         out = self.fc4(out)
         return out
 
-'''
-STEP 4: INSTANTIATE MODEL CLASS
-'''
 
-input_dim = 28 * 28
-hidden_dim = 100
-output_dim = 10
+def train(model, device, train_loader, test_loader, criterion, optimizer, n_iters):
+    """Train the model and evaluate every 500 iterations."""
+    iter_count = 0
+    num_epochs = int(n_iters / (len(train_loader.dataset) / train_loader.batch_size))
 
-model = FeedforwardNeuralNetModel(input_dim, hidden_dim, output_dim)
+    for epoch in range(num_epochs):
+        model.train()
+        for images, labels in train_loader:
+            images = images.view(-1, 28 * 28).to(device)
+            labels = labels.to(device)
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model.to(device)
+            optimizer.zero_grad()
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
 
-'''
-STEP 5: INSTANTIATE LOSS CLASS
-'''
+            iter_count += 1
 
-criterion = nn.CrossEntropyLoss()
+            if iter_count % 500 == 0:
+                accuracy = evaluate(model, device, test_loader)
+                print(
+                    f"Iteration: {iter_count}. "
+                    f"Loss: {loss.item():.4f}. "
+                    f"Accuracy: {accuracy:.2f}%"
+                )
+                model.train()
 
-'''
-STEP 6: INSTANTIATE OPTIMIZER CLASS
-'''
 
-learning_rate = 0.1
-optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
+def evaluate(model, device, test_loader):
+    """Evaluate model accuracy on the test set."""
+    correct = 0
+    total = 0
 
-'''
-STEP 7: TRAIN THE MODEL
-'''
+    model.eval()
+    with torch.no_grad():
+        for images, labels in test_loader:
+            images = images.view(-1, 28 * 28).to(device)
+            labels = labels.to(device)
 
-iter_count = 0
-for epoch in range(num_epochs):
-    model.train()
-    for i, (images, labels) in enumerate(train_loader):
-        images = images.view(-1, 28 * 28).to(device)
-        labels = labels.to(device)
+            outputs = model(images)
+            _, predicted = torch.max(outputs, 1)
 
-        # Clear gradients w.r.t. parameters
-        optimizer.zero_grad()
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
 
-        # Forward pass to get output/logits
-        outputs = model(images)
+    return 100.0 * correct / total
 
-        # Calculate Loss: softmax --> cross entropy loss
-        loss = criterion(outputs, labels)
 
-        # Getting gradients w.r.t. parameters
-        loss.backward()
+def main():
+    # ── Hyperparameters ──────────────────────────────────────────
+    batch_size = 100
+    n_iters = 3000
+    learning_rate = 0.1
+    input_dim = 28 * 28
+    hidden_dim = 100
+    output_dim = 10
 
-        # Updating parameters
-        optimizer.step()
+    # ── Dataset ──────────────────────────────────────────────────
+    train_dataset = dsets.MNIST(
+        root="./data", train=True, transform=transforms.ToTensor(), download=True
+    )
+    test_dataset = dsets.MNIST(
+        root="./data", train=False, transform=transforms.ToTensor()
+    )
 
-        iter_count += 1
+    train_loader = torch.utils.data.DataLoader(
+        dataset=train_dataset, batch_size=batch_size, shuffle=True
+    )
+    test_loader = torch.utils.data.DataLoader(
+        dataset=test_dataset, batch_size=batch_size, shuffle=False
+    )
 
-        if iter_count % 500 == 0:
-            # Calculate Accuracy
-            correct = 0
-            total = 0
+    # ── Model / Loss / Optimizer ─────────────────────────────────
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = FeedforwardNeuralNetModel(input_dim, hidden_dim, output_dim).to(device)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
 
-            model.eval()
-            with torch.no_grad():
-                for test_images, test_labels in test_loader:
-                    test_images = test_images.view(-1, 28 * 28).to(device)
-                    test_labels = test_labels.to(device)
+    # ── Train ────────────────────────────────────────────────────
+    train(model, device, train_loader, test_loader, criterion, optimizer, n_iters)
 
-                    # Forward pass only to get logits/output
-                    test_outputs = model(test_images)
+    # ── Final evaluation ─────────────────────────────────────────
+    final_accuracy = evaluate(model, device, test_loader)
+    print(f"\nFinal Test Accuracy: {final_accuracy:.2f}%")
 
-                    # Get predictions from the maximum value
-                    _, predicted = torch.max(test_outputs.data, 1)
 
-                    # Total number of labels
-                    total += test_labels.size(0)
-
-                    # Total correct predictions
-                    correct += (predicted == test_labels).sum().item()
-
-            accuracy = 100.0 * correct / total
-
-            # Print Loss
-            print('Iteration: {}. Loss: {:.4f}. Accuracy: {:.2f}%'.format(
-                iter_count, loss.item(), accuracy))
-
-            model.train()
+if __name__ == "__main__":
+    main()
